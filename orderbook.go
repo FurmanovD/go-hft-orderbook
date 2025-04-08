@@ -35,27 +35,27 @@ func NewOrderbook() Orderbook {
 	}
 }
 
-func (this *Orderbook) Add(price float64, o *Order) {
+func (ob *Orderbook) Add(price float64, o *Order) {
 	var limit *LimitOrder
 
 	if o.BidOrAsk {
-		limit = this.bidLimitsCache[price]
+		limit = ob.bidLimitsCache[price]
 	} else {
-		limit = this.askLimitsCache[price]
+		limit = ob.askLimitsCache[price]
 	}
 
 	if limit == nil {
 		// getting a new limit from pool
-		limit = this.pool.Get().(*LimitOrder)
+		limit = ob.pool.Get().(*LimitOrder)
 		limit.Price = price
 
 		// insert into the corresponding BST and cache
 		if o.BidOrAsk {
-			this.Bids.Put(price, limit)
-			this.bidLimitsCache[price] = limit
+			ob.Bids.Put(price, limit)
+			ob.bidLimitsCache[price] = limit
 		} else {
-			this.Asks.Put(price, limit)
-			this.askLimitsCache[price] = limit
+			ob.Asks.Put(price, limit)
+			ob.askLimitsCache[price] = limit
 		}
 	}
 
@@ -63,39 +63,39 @@ func (this *Orderbook) Add(price float64, o *Order) {
 	limit.Enqueue(o)
 }
 
-func (this *Orderbook) Cancel(o *Order) {
+func (ob *Orderbook) Cancel(o *Order) {
 	limit := o.Limit
 	limit.Delete(o)
 
 	if limit.Size() == 0 {
 		// remove the limit if there are no orders
 		if o.BidOrAsk {
-			this.Bids.Delete(limit.Price)
-			delete(this.bidLimitsCache, limit.Price)
+			ob.Bids.Delete(limit.Price)
+			delete(ob.bidLimitsCache, limit.Price)
 		} else {
-			this.Asks.Delete(limit.Price)
-			delete(this.askLimitsCache, limit.Price)
+			ob.Asks.Delete(limit.Price)
+			delete(ob.askLimitsCache, limit.Price)
 		}
 
 		// put it back to the pool
-		this.pool.Put(limit)
+		ob.pool.Put(limit)
 	}
 }
 
-func (this *Orderbook) ClearBidLimit(price float64) {
-	this.clearLimit(price, true)
+func (ob *Orderbook) ClearBidLimit(price float64) {
+	ob.clearLimit(price, true)
 }
 
-func (this *Orderbook) ClearAskLimit(price float64) {
-	this.clearLimit(price, false)
+func (ob *Orderbook) ClearAskLimit(price float64) {
+	ob.clearLimit(price, false)
 }
 
-func (this *Orderbook) clearLimit(price float64, bidOrAsk bool) {
+func (ob *Orderbook) clearLimit(price float64, bidOrAsk bool) {
 	var limit *LimitOrder
 	if bidOrAsk {
-		limit = this.bidLimitsCache[price]
+		limit = ob.bidLimitsCache[price]
 	} else {
-		limit = this.askLimitsCache[price]
+		limit = ob.askLimitsCache[price]
 	}
 
 	if limit == nil {
@@ -105,73 +105,73 @@ func (this *Orderbook) clearLimit(price float64, bidOrAsk bool) {
 	limit.Clear()
 }
 
-func (this *Orderbook) DeleteBidLimit(price float64) {
-	limit := this.bidLimitsCache[price]
+func (ob *Orderbook) DeleteBidLimit(price float64) {
+	limit := ob.bidLimitsCache[price]
 	if limit == nil {
 		return
 	}
 
-	this.deleteLimit(price, true)
-	delete(this.bidLimitsCache, price)
+	ob.deleteLimit(price, true)
+	delete(ob.bidLimitsCache, price)
 
 	// put limit back to the pool
 	limit.Clear()
-	this.pool.Put(limit)
+	ob.pool.Put(limit)
 
 }
 
-func (this *Orderbook) DeleteAskLimit(price float64) {
-	limit := this.askLimitsCache[price]
+func (ob *Orderbook) DeleteAskLimit(price float64) {
+	limit := ob.askLimitsCache[price]
 	if limit == nil {
 		return
 	}
 
-	this.deleteLimit(price, false)
-	delete(this.askLimitsCache, price)
+	ob.deleteLimit(price, false)
+	delete(ob.askLimitsCache, price)
 
 	// put limit back to the pool
 	limit.Clear()
-	this.pool.Put(limit)
+	ob.pool.Put(limit)
 }
 
-func (this *Orderbook) deleteLimit(price float64, bidOrAsk bool) {
+func (ob *Orderbook) deleteLimit(price float64, bidOrAsk bool) {
 	if bidOrAsk {
-		this.Bids.Delete(price)
+		ob.Bids.Delete(price)
 	} else {
-		this.Asks.Delete(price)
+		ob.Asks.Delete(price)
 	}
 }
 
-func (this *Orderbook) GetVolumeAtBidLimit(price float64) float64 {
-	limit := this.bidLimitsCache[price]
+func (ob *Orderbook) GetVolumeAtBidLimit(price float64) float64 {
+	limit := ob.bidLimitsCache[price]
 	if limit == nil {
 		return 0
 	}
 	return limit.TotalVolume()
 }
 
-func (this *Orderbook) GetVolumeAtAskLimit(price float64) float64 {
-	limit := this.askLimitsCache[price]
+func (ob *Orderbook) GetVolumeAtAskLimit(price float64) float64 {
+	limit := ob.askLimitsCache[price]
 	if limit == nil {
 		return 0
 	}
 	return limit.TotalVolume()
 }
 
-func (this *Orderbook) GetBestBid() float64 {
-	return this.Bids.Max()
+func (ob *Orderbook) GetBestBid() float64 {
+	return ob.Bids.Max()
 }
 
-func (this *Orderbook) GetBestOffer() float64 {
-	return this.Asks.Min()
+func (ob *Orderbook) GetBestOffer() float64 {
+	return ob.Asks.Min()
 }
 
-func (this *Orderbook) BLength() int {
-	return len(this.bidLimitsCache)
+func (ob *Orderbook) BLength() int {
+	return len(ob.bidLimitsCache)
 }
 
-func (this *Orderbook) ALength() int {
-	return len(this.askLimitsCache)
+func (ob *Orderbook) ALength() int {
+	return len(ob.askLimitsCache)
 }
 
 func (ob *Orderbook) GetBidLimit(price float64) *LimitOrder {

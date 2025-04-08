@@ -12,43 +12,43 @@ func NewOrdersQueue() ordersQueue {
 	return ordersQueue{}
 }
 
-func (this *ordersQueue) Size() int {
-	return this.size
+func (oq *ordersQueue) Size() int {
+	return oq.size
 }
 
-func (this *ordersQueue) IsEmpty() bool {
-	return this.size == 0
+func (oq *ordersQueue) IsEmpty() bool {
+	return oq.size == 0
 }
 
-func (this *ordersQueue) Enqueue(o *Order) {
-	tail := this.tail
-	this.tail = o
+func (oq *ordersQueue) Enqueue(o *Order) {
+	tail := oq.tail
+	oq.tail = o
 	if tail != nil {
 		tail.Next = o
 		o.Prev = tail
 	}
-	if this.head == nil {
-		this.head = o
+	if oq.head == nil {
+		oq.head = o
 	}
-	this.size++
+	oq.size++
 }
 
-func (this *ordersQueue) Dequeue() *Order {
-	if this.size == 0 {
+func (oq *ordersQueue) Dequeue() *Order {
+	if oq.size == 0 {
 		return nil
 	}
 
-	head := this.head
-	if this.tail == this.head {
-		this.tail = nil
+	head := oq.head
+	if oq.tail == oq.head {
+		oq.tail = nil
 	}
 
-	this.head = this.head.Next
-	this.size--
+	oq.head = oq.head.Next
+	oq.size--
 	return head
 }
 
-func (this *ordersQueue) Delete(o *Order) {
+func (oq *ordersQueue) Delete(o *Order) {
 	prev := o.Prev
 	next := o.Next
 	if prev != nil {
@@ -60,12 +60,12 @@ func (this *ordersQueue) Delete(o *Order) {
 	o.Next = nil
 	o.Prev = nil
 
-	this.size--
+	oq.size--
 
-	if this.head == o {
-		this.head = next
+	if oq.head == o {
+		oq.head = next
 	}
-	if this.tail == o {
-		this.tail = prev
+	if oq.tail == o {
+		oq.tail = prev
 	}
 }

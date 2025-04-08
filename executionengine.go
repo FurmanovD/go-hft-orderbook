@@ -50,7 +50,7 @@ type orderbookDistributed interface {
 	Unlock(context.Context) error
 
 	Add(context.Context, float64, *Order) error
-	Cancel(context.Context, float64, *Order)
+	Cancel(context.Context, float64, *Order) error
 
 	GetAskLimit(float64) *LimitOrder
 	GetBidLimit(float64) *LimitOrder
@@ -129,27 +129,33 @@ func (ee *ExecutionEngine) processOrders() {
 	for {
 		select {
 		case order := <-ee.inputChan:
-			ee.processOrder(order)
+			// TODO(DF) pass to the error channel
+			_ = ee.processOrder(order)
 		case <-ee.stopChan:
 			return
 		}
 	}
 }
 
-func (ee *ExecutionEngine) processOrder(o *Order) {
+func (ee *ExecutionEngine) processOrder(o *Order) error {
 	// TODO(DF) pass ctx with the order?
 	ctx, cancel := context.WithTimeout(context.Background(), OrderExecutionTimeout)
 	defer cancel()
 
 	// Lock the whole order book globally until the order is executed/added
-	ee.obd.Lock(ctx)
-	defer ee.obd.Unlock(ctx)
+	if err := ee.obd.Lock(ctx); err != nil {
+		return fmt.Errorf("failed to lock order book: %+w", err)
+	}
+	defer func() {
+		if err := ee.obd.Unlock(ctx); err != nil {
+			log.Printf("failed to unlock order book: %v", err)
+		}
+	}()
 
 	tx := ee.createTransaction(ctx, o)
 
 	if err := tx.orderLock.Lock(ctx, LockTTLOrderExecution); err != nil {
-		log.Printf("failed to lock order %d to execute: %+v", tx.order.Id, err)
-		return // err
+		return fmt.Errorf("failed to lock order %d to execute: %+w", tx.order.Id, err)
 	}
 
 	defer func() {
@@ -160,12 +166,15 @@ func (ee *ExecutionEngine) processOrder(o *Order) {
 
 	if err := ee.executeTransaction(ctx, tx); err != nil {
 		ee.rollbackTransaction(ctx, tx)
-		return
+		return fmt.Errorf("failed to execute order %d: %+w", tx.order.Id, err)
 	}
 
 	if err := ee.commitTransaction(ctx, tx); err != nil {
 		ee.rollbackTransaction(ctx, tx)
+		return fmt.Errorf("failed to commit order %d: %+w", tx.order.Id, err)
 	}
+
+	return nil
 }
 
 type transaction struct {
@@ -210,7 +219,8 @@ func (ee *ExecutionEngine) prepareOrderAddition(tx *transaction) error {
 	// Record undo step
 	tx.steps = append(tx.steps, transactionStep{
 		undo: func(ctx context.Context) error {
-			ee.obd.Cancel(ctx, tx.order.Limit.Price, tx.order)
+			// TODO(DF) send error to the error channel
+			_ = ee.obd.Cancel(ctx, tx.order.Limit.Price, tx.order)
 			return nil
 		},
 		redisState: snapshot.redisData,

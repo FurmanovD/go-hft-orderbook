@@ -70,8 +70,21 @@ func (_c *mockOrderbookDistributed_Add_Call) RunAndReturn(run func(context.Conte
 }
 
 // Cancel provides a mock function with given fields: _a0, _a1, _a2
-func (_m *mockOrderbookDistributed) Cancel(_a0 context.Context, _a1 float64, _a2 *Order) {
-	_m.Called(_a0, _a1, _a2)
+func (_m *mockOrderbookDistributed) Cancel(_a0 context.Context, _a1 float64, _a2 *Order) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Cancel")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, float64, *Order) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // mockOrderbookDistributed_Cancel_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Cancel'
@@ -94,12 +107,12 @@ func (_c *mockOrderbookDistributed_Cancel_Call) Run(run func(_a0 context.Context
 	return _c
 }
 
-func (_c *mockOrderbookDistributed_Cancel_Call) Return() *mockOrderbookDistributed_Cancel_Call {
-	_c.Call.Return()
+func (_c *mockOrderbookDistributed_Cancel_Call) Return(_a0 error) *mockOrderbookDistributed_Cancel_Call {
+	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *mockOrderbookDistributed_Cancel_Call) RunAndReturn(run func(context.Context, float64, *Order)) *mockOrderbookDistributed_Cancel_Call {
+func (_c *mockOrderbookDistributed_Cancel_Call) RunAndReturn(run func(context.Context, float64, *Order) error) *mockOrderbookDistributed_Cancel_Call {
 	_c.Call.Return(run)
 	return _c
 }

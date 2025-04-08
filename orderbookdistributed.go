@@ -111,7 +111,9 @@ func (obd *OrderbookDistributed) StartBackgroundSync(ctx context.Context, interv
 			for {
 				select {
 				case <-ticker.C:
-					obd.SyncOrdersFromRedis(ctx)
+					if err := obd.SyncOrdersFromRedis(ctx); err != nil {
+						panic(err)
+					}
 				case <-obd.syncStopChan:
 					return
 				case <-ctx.Done():
@@ -125,8 +127,15 @@ func (obd *OrderbookDistributed) StartBackgroundSync(ctx context.Context, interv
 // SyncOrdersFromRedis synchronizes orders from Redis to memory.
 // Also might be used as a an inefficient, but more robust rollback mechanism.
 func (obd *OrderbookDistributed) SyncOrdersFromRedis(ctx context.Context) error {
-	obd.Lock(ctx)
-	defer obd.Unlock(ctx)
+	if err := obd.Lock(ctx); err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := obd.Unlock(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	wg := &sync.WaitGroup{}
 
@@ -263,7 +272,7 @@ func (obd *OrderbookDistributed) add(ctx context.Context, orderMap map[int]*Orde
 	return nil
 }
 
-func (obd *OrderbookDistributed) Cancel(ctx context.Context, price float64, o *Order) {
+func (obd *OrderbookDistributed) Cancel(ctx context.Context, price float64, o *Order) error {
 	var lock *sync.RWMutex
 	var orderMap map[int]*Order
 
@@ -278,7 +287,7 @@ func (obd *OrderbookDistributed) Cancel(ctx context.Context, price float64, o *O
 	lock.Lock()
 	defer lock.Unlock()
 
-	obd.cancel(ctx, orderMap, price, o)
+	return obd.cancel(ctx, orderMap, price, o)
 }
 
 func (obd *OrderbookDistributed) cancel(ctx context.Context, orderMap map[int]*Order, price float64, o *Order) error {

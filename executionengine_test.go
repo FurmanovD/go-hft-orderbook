@@ -214,7 +214,7 @@ func TestExecutionEngine_RollbackOnPipelineError(t *testing.T) {
 
 	// Rollback expectations
 	obMock.EXPECT().Add(mock.Anything, price, orderMaker).Return(nil).Once()
-	obMock.EXPECT().Cancel(mock.Anything, 100.0, mock.Anything).Once()
+	obMock.EXPECT().Cancel(mock.Anything, 100.0, mock.Anything).Return(nil).Once()
 
 	redisMock.EXPECT().Set(mock.Anything, "order:bidLimit:2", []byte(`{"ID":2,"Volume":50,"BidOrAsk":true,"Price":100}`), time.Duration(0)).Return(redis.NewStatusResult("", nil)).Once()
 	redisMock.EXPECT().Set(mock.Anything, "order:askLimit:1", []byte(`{"ID":1,"Volume":100,"BidOrAsk":false,"Price":100}`), time.Duration(0)).Return(redis.NewStatusResult("", nil)).Once()
