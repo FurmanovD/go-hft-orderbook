@@ -394,9 +394,7 @@ func (obd *OrderbookDistributed) Lock(ctx context.Context) error {
 		obd.muBidLimit.Unlock()
 		obd.mu.Unlock()
 
-		if err != nil {
-			return err
-		}
+		return err
 	}
 
 	return nil
