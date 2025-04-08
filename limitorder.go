@@ -3,55 +3,55 @@ package hftorderbook
 // Limit price orders combined as a FIFO queue
 type LimitOrder struct {
 	Price float64
-	
-	orders *ordersQueue
+
+	orders      *ordersQueue
 	totalVolume float64
 }
 
 func NewLimitOrder(price float64) LimitOrder {
 	q := NewOrdersQueue()
 	return LimitOrder{
-		Price: price,
+		Price:  price,
 		orders: &q,
 	}
 }
 
-func (this *LimitOrder) TotalVolume() float64 {
-	return this.totalVolume
+func (lo *LimitOrder) TotalVolume() float64 {
+	return lo.totalVolume
 }
 
-func (this *LimitOrder) Size() int {
-	return this.orders.Size()
+func (lo *LimitOrder) Size() int {
+	return lo.orders.Size()
 }
 
-func (this *LimitOrder) Enqueue(o *Order) {
-	this.orders.Enqueue(o)
-	o.Limit = this
-	this.totalVolume += o.Volume
+func (lo *LimitOrder) Enqueue(o *Order) {
+	lo.orders.Enqueue(o)
+	o.Limit = lo
+	lo.totalVolume += o.Volume
 }
 
-func (this *LimitOrder) Dequeue() *Order {
-	if this.orders.IsEmpty() {
+func (lo *LimitOrder) Dequeue() *Order {
+	if lo.orders.IsEmpty() {
 		return nil
 	}
 
-	o := this.orders.Dequeue()
-	this.totalVolume -= o.Volume
+	o := lo.orders.Dequeue()
+	lo.totalVolume -= o.Volume
 	return o
 }
 
-func (this *LimitOrder) Delete(o *Order) {
-	if o.Limit != this {
+func (lo *LimitOrder) Delete(o *Order) {
+	if o.Limit != lo {
 		panic("order does not belong to the limit")
 	}
 
-	this.orders.Delete(o)
+	lo.orders.Delete(o)
 	o.Limit = nil
-	this.totalVolume -= o.Volume
+	lo.totalVolume -= o.Volume
 }
 
-func (this *LimitOrder) Clear() {
+func (lo *LimitOrder) Clear() {
 	q := NewOrdersQueue()
-	this.orders = &q
-	this.totalVolume = 0
+	lo.orders = &q
+	lo.totalVolume = 0
 }
