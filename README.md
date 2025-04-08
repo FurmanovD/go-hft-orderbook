@@ -24,6 +24,7 @@ rad:git:hwd1yregaqj5mrp5dgc3gyuu6exszg84zr71su8j1f7t6oe9czxee1zzyzr
 # Order Execution Engine Component Overview
 
 ## 1. Core Classes
+The high level UML representation of objects added is in `doc/ClassesAdded.drawio`
 
 ### 1.1 `ExecutionEngine`
 **Responsibility**: Central order processing system with atomic execution guarantees
