@@ -1,7 +1,8 @@
+//go:generate mockery --with-expecter --name=redisClient --testonly --inpackage --filename=redisclient_mock.go
+//go:generate mockery --with-expecter --name=redisPipeliner --testonly --inpackage --filename=redispipeliner_mock.go
+//go:generate mockery --with-expecter --name=orderbookDistributed --testonly --inpackage --filename=orderbookdistributed_mock.go
+//go:generate mockery --with-expecter --name=clock --testonly --inpackage --filename=clock_mock.go
 package hftorderbook
-
-// TODO(DF) should be a part of its own separate package.
-// This implementation is added to avoid global refactoring of the original order book package
 
 import (
 	"context"
@@ -27,6 +28,12 @@ var (
 	}
 )
 
+type redisPipeliner interface {
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	Del(ctx context.Context, keys ...string) *redis.IntCmd
+	Exec(ctx context.Context) ([]redis.Cmder, error)
+}
+
 type redisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
@@ -35,11 +42,25 @@ type redisClient interface {
 	// the SetNX is present to satisfy the redisLock instances creation
 	SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.BoolCmd
 	// next methods are executor-engine specific
-	Pipeline() redis.Pipeliner
+	Pipeline() redisPipeliner
+}
+
+type orderbookDistributed interface {
+	Lock(context.Context) error
+	Unlock(context.Context) error
+
+	Add(context.Context, float64, *Order) error
+	Cancel(context.Context, float64, *Order)
+
+	GetAskLimit(float64) *LimitOrder
+	GetBidLimit(float64) *LimitOrder
+
+	GetBestOffer(context.Context) float64
+	GetBestBid(context.Context) float64
 }
 
 type ExecutionEngine struct {
-	obd       *OrderbookDistributed
+	obd       orderbookDistributed
 	redis     redisClient
 	inputChan chan *Order
 	stopChan  chan struct{}
@@ -68,9 +89,8 @@ type orderSnapshot struct {
 }
 
 func NewExecutionEngine(
-	ob *OrderbookDistributed,
+	ob orderbookDistributed,
 	redis redisClient,
-	locker redislock.RedisLock,
 	workers int,
 	c clock,
 ) *ExecutionEngine {
@@ -121,8 +141,22 @@ func (ee *ExecutionEngine) processOrder(o *Order) {
 	ctx, cancel := context.WithTimeout(context.Background(), OrderExecutionTimeout)
 	defer cancel()
 
+	// Lock the whole order book globally until the order is executed/added
+	ee.obd.Lock(ctx)
+	defer ee.obd.Unlock(ctx)
+
 	tx := ee.createTransaction(ctx, o)
-	defer tx.cleanup()
+
+	if err := tx.orderLock.Lock(ctx, LockTTLOrderExecution); err != nil {
+		log.Printf("failed to lock order %d to execute: %+v", tx.order.Id, err)
+		return // err
+	}
+
+	defer func() {
+		if err := tx.orderLock.Unlock(ctx); err != nil {
+			log.Printf("failed to unlock order %d execution lock: %v", tx.order.Id, err)
+		}
+	}()
 
 	if err := ee.executeTransaction(ctx, tx); err != nil {
 		ee.rollbackTransaction(ctx, tx)
@@ -153,20 +187,6 @@ func (ee *ExecutionEngine) createTransaction(ctx context.Context, o *Order) *tra
 }
 
 func (ee *ExecutionEngine) executeTransaction(ctx context.Context, tx *transaction) error {
-	// Lock the whole order book globally until the order is executed/added
-	ee.obd.Lock(ctx)
-	defer ee.obd.Unlock(ctx)
-
-	if err := tx.orderLock.Lock(ctx, LockTTLOrderExecution); err != nil {
-		return fmt.Errorf("failed to lock order %d to execute: %w", tx.order.Id, err)
-	}
-
-	defer func() {
-		if err := tx.orderLock.Unlock(ctx); err != nil {
-			log.Printf("failed to unlock order %d execution lock: %v", tx.order.Id, err)
-		}
-	}()
-
 	if err := ee.prepareOrderAddition(tx); err != nil {
 		return err
 	}
@@ -262,6 +282,8 @@ func (ee *ExecutionEngine) matchAtPrice(tx *transaction, price float64) error {
 	makerOrder.Volume -= tradeVolume
 
 	// Record trade event
+	// TODO(DF) reimplement to collect all the trade events in a slice and send them all
+	// in a correct order when the transaction is commited.
 	ee.tradeChan <- TradeEvent{
 		TakerOrderID: tx.order.Id,
 		MakerOrderID: makerOrder.Id,
@@ -328,7 +350,7 @@ func (ee *ExecutionEngine) commitTransaction(ctx context.Context, tx *transactio
 	// Persist all changes to Redis
 	pipe := ee.redis.Pipeline()
 
-	// Persist taker order
+	// Persist taker order if there is any unmatched volume left
 	if tx.order.Volume > 0 {
 		data, err := json.Marshal(RedisOrder{
 			ID:       tx.order.Id,
@@ -360,6 +382,7 @@ func (ee *ExecutionEngine) commitTransaction(ctx context.Context, tx *transactio
 		}
 	}
 
+	// TODO(DF) analyze the result as well
 	_, err := pipe.Exec(ctx)
 	return err
 }
@@ -381,14 +404,6 @@ func (ee *ExecutionEngine) Stop() {
 	close(ee.stopChan)
 	ee.wg.Wait()
 	close(ee.tradeChan)
-}
-
-func (tx *transaction) cleanup() {
-	for _, order := range tx.matchedOrders {
-		if order.Volume <= 0 {
-			order.Limit = nil
-		}
-	}
 }
 
 func (ee *ExecutionEngine) getBestMatchPrice(ctx context.Context, bidOrAsk bool, limitPrice float64) float64 {
